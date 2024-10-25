@@ -1,5 +1,8 @@
 #include "systemcalls.h"
-
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -16,8 +19,21 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    int status = system(cmd);
+    if(status == -1)
+    {
+        return false;
+    }
 
-    return true;
+    else
+    {
+        if(WIFEXITED(status))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -59,9 +75,43 @@ bool do_exec(int count, ...)
  *
 */
 
-    va_end(args);
+    int status;
+    pid_t pid;
 
-    return true;
+    pid = fork();
+    // printf("PID: %d\n", pid);
+    if(pid == -1) return false;
+
+    else if (pid == 0)
+    {    
+        execv(command[0], command);
+        exit(-1);
+    }
+
+    if(waitpid(pid, &status, 0) == -1)
+    {
+        return false;
+    }
+
+    va_end(args);
+    
+    if(WIFEXITED(status))
+    {
+        if(WEXITSTATUS(status) == 0)
+        {
+            return true; 
+        }
+
+        else
+        {
+            return false;
+        }
+    }
+
+    else
+    {
+        return false;
+    }
 }
 
 /**
@@ -93,7 +143,51 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
-    va_end(args);
+    int status;
+    pid_t pid;
 
-    return true;
+    int fd;
+    fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if(fd < 0) return false;
+
+    pid = fork();
+    if(pid == -1) return false;
+    else if(pid == 0)
+    {
+        if(dup2(fd, 1) < 0) 
+        {
+            close(fd);
+            return false;
+        }
+        else
+        {
+            execv(command[0], command);
+            exit(-1);
+        }
+    }
+
+    if(waitpid(pid, &status, 0) == -1)
+    {
+        return false;
+    }
+
+    if(WIFEXITED(status))
+    {
+        if(WEXITSTATUS(status) == 0)
+        {
+            return true; 
+        }
+
+        else
+        {
+            return false;
+        }
+    }
+
+    else
+    {
+        return false;
+    }
+
+    va_end(args);
 }
